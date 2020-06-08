@@ -25,6 +25,16 @@
                 "is_background_page": true
             }
         },
+        "content_scripts": [
+            {
+                "windows": [
+                    "background"
+                ],
+                "js": [
+                    "windows/background-script.js"
+                ]
+            }
+        ],
         "launch_events": [
             {
                 "event": "AllGamesLaunch"
