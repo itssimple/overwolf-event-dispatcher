@@ -1,0 +1,40 @@
+{
+    "manifest_version": 1,
+    "type": "WebApp",
+    "meta": {
+        "name": "Overwolf Event Dispatcher",
+        "author": "NoLifeKing85",
+        "version": "1.0.0",
+        "minimum-overwolf-version": "0.120.0",
+        "description": "Enables game event output to a websocket endpoint for further use",
+        "icon": "./nlk.png"
+    },
+    "permissions": [
+        "GameInfo",
+        "Logging"
+    ],
+    "data": {
+        "game_targeting": {
+            "type": "all"
+        },
+        "start_window": "background",
+        "windows": {
+            "background": {
+                "file": "windows/background-window.html",
+                "show_in_taskbar": false,
+                "is_background_page": true
+            }
+        },
+        "launch_events": [
+            {
+                "event": "AllGamesLaunch"
+            }
+        ],
+        "user_agent": "Overwolf Event Dispatcher",
+        "developer": {
+            "enable_auto_refresh": true,
+            "reload_delay": 1000,
+            "filter": "*.*"
+        }
+    }
+}
