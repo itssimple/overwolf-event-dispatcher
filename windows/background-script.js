@@ -52,10 +52,8 @@ const OverwolfGameSupportedEvents = {
 
 function log(message, ...params) {
     console.log(message, ...params);
-    /*
-    if (OverwolfEventDispatcher.webSocket && OverwolfEventDispatcher.webSocket.readyState === 1) {
-        OverwolfEventDispatcher.sendDataToWebsocket({ message, ...params });
-    }
+    /* Only used for debugging purposes, to also send all logged events over the websocket.
+    OverwolfEventDispatcher.sendDataToWebsocket({ message, ...params });
     */
 }
 
@@ -70,12 +68,11 @@ class OverwolfEventDispatcher {
 
     static firstFiredEvent = true;
 
-    static webSocket = null;
-
     static eventQueue = [];
 
     static currentGame = null;
 
+    static webSocket = null;
     static webSocketRetries = 0;
     static webSocketRetryTimeout = null;
 
@@ -93,9 +90,6 @@ class OverwolfEventDispatcher {
         log('[EVENTHANDLERS]', 'Setting game event-handlers');
         overwolf.games.events.onError.removeListener(OverwolfEventDispatcher.gameEventError);
         overwolf.games.events.onError.addListener(OverwolfEventDispatcher.gameEventError);
-
-        overwolf.games.events.onInfoUpdates.removeListener(OverwolfEventDispatcher.gameEventUpdated);
-        overwolf.games.events.onInfoUpdates.addListener(OverwolfEventDispatcher.gameEventUpdated);
 
         overwolf.games.events.onInfoUpdates2.removeListener(OverwolfEventDispatcher.gameEventUpdated2);
         overwolf.games.events.onInfoUpdates2.addListener(OverwolfEventDispatcher.gameEventUpdated2);
