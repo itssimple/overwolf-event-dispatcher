@@ -105,13 +105,16 @@ class OverwolfEventDispatcher {
     }
 
     static openWebSocket() {
-        if (OverwolfEventDispatcher.webSocketRetries > 5 && OverwolfEventDispatcher.webSocketRetryTimeout == null) {
-            OverwolfEventDispatcher.webSocketRetryTimeout = setTimeout(function () {
-                OverwolfEventDispatcher.webSocketRetries--;
-                OverwolfEventDispatcher.webSocketRetryTimeout = null;
-            }, 10000);
-
-            return;
+        if (OverwolfEventDispatcher.webSocketRetries >= 5) {
+            log('[WEBSOCKET]', 'Too many errors, waiting a while before we retry connection.');
+            if (OverwolfEventDispatcher.webSocketRetries > 0 && OverwolfEventDispatcher.webSocketRetryTimeout == null) {
+                OverwolfEventDispatcher.webSocketRetryTimeout = setTimeout(function () {
+                    OverwolfEventDispatcher.webSocketRetries--;
+                    OverwolfEventDispatcher.webSocketRetryTimeout = null;
+                }, 10000);
+                log('[WEBSOCKET]', `Still got ${OverwolfEventDispatcher.webSocketRetries} retries to remove.`);
+                return;
+            }
         }
         if (!OverwolfEventDispatcher.webSocket || OverwolfEventDispatcher.webSocket.readyState !== 1) {
             log('[WEBSOCKET]', 'Opening new websocket connection');
@@ -172,7 +175,7 @@ class OverwolfEventDispatcher {
     static featureTimeout = null;
 
     static setFeatures(features) {
-        if (!!OverwolfEventDispatcher.featureTimeout) {
+        if (OverwolfEventDispatcher.featureTimeout != null) {
             clearTimeout(OverwolfEventDispatcher.featureTimeout);
             OverwolfEventDispatcher.featureTimeout = null;
         }
