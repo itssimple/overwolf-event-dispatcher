@@ -216,6 +216,7 @@ class OverwolfEventDispatcher {
 
         if (!event.gameInfo.isRunning && event.runningChanged) {
             OverwolfEventDispatcher.firstFiredEvent = true;
+            OverwolfEventDispatcher.currentGame = null;
         }
     }
 
