@@ -50,12 +50,21 @@ const OverwolfGameSupportedEvents = {
     WorldOfWarships: ['gep_internal', 'game_info', 'account_info', 'match', 'match_info', 'kill', 'death']
 };
 
+function log(message, ...params) {
+    console.log(message, ...params);
+    /*
+    if (OverwolfEventDispatcher.webSocket && OverwolfEventDispatcher.webSocket.readyState === 1) {
+        OverwolfEventDispatcher.sendDataToWebsocket({ message, ...params });
+    }
+    */
+}
+
 class OverwolfEventDispatcher {
     constructor()
     {
-        console.debug('[INIT]', 'Class initialized - Registering event handlers');
-        this.setEventHandlers();
-        console.debug('[INIT]', 'Setting up websocket connection');
+        log('[INIT]', 'Class initialized - Registering event handlers');
+        OverwolfEventDispatcher.setEventHandlers();
+        log('[INIT]', 'Setting up websocket connection');
         OverwolfEventDispatcher.openWebSocket();
     }
 
@@ -65,54 +74,79 @@ class OverwolfEventDispatcher {
 
     static eventQueue = [];
 
-    setEventHandlers() {
-        overwolf.games.onGameLaunched.removeListener(this.gameLaunched);
-        overwolf.games.onGameLaunched.addListener(this.gameLaunched);
+    static currentGame = null;
 
-        overwolf.games.onGameInfoUpdated.removeListener(this.gameInfoUpdated);
-        overwolf.games.onGameInfoUpdated.addListener(this.gameInfoUpdated);
+    static webSocketRetries = 0;
+    static webSocketRetryTimeout = null;
 
-        overwolf.games.events.onError.removeListener(this.gameEventError);
-        overwolf.games.events.onError.addListener(this.gameEventError);
+    static setEventHandlers() {
+        overwolf.games.onGameLaunched.removeListener(OverwolfEventDispatcher.gameLaunched);
+        overwolf.games.onGameLaunched.addListener(OverwolfEventDispatcher.gameLaunched);
 
-        overwolf.games.events.onInfoUpdates.removeListener(this.gameEventUpdated);
-        overwolf.games.events.onInfoUpdates.addListener(this.gameEventUpdated);
+        overwolf.games.onGameInfoUpdated.removeListener(OverwolfEventDispatcher.gameInfoUpdated);
+        overwolf.games.onGameInfoUpdated.addListener(OverwolfEventDispatcher.gameInfoUpdated);
 
-        overwolf.games.events.onInfoUpdates2.removeListener(this.gameEventUpdated2);
-        overwolf.games.events.onInfoUpdates2.addListener(this.gameEventUpdated2);
+        log('[EVENTHANDLERS]', 'All eventhandlers have been set.');
+    }
 
-        overwolf.games.events.onNewEvents.removeListener(this.gameEvents);
-        overwolf.games.events.onNewEvents.addListener(this.gameEvents);
+    static setGameEventHandlers() {
+        log('[EVENTHANDLERS]', 'Setting game event-handlers');
+        overwolf.games.events.onError.removeListener(OverwolfEventDispatcher.gameEventError);
+        overwolf.games.events.onError.addListener(OverwolfEventDispatcher.gameEventError);
 
-        console.debug('[EVENTHANDLERS]', 'All eventhandlers have been set.');
+        overwolf.games.events.onInfoUpdates.removeListener(OverwolfEventDispatcher.gameEventUpdated);
+        overwolf.games.events.onInfoUpdates.addListener(OverwolfEventDispatcher.gameEventUpdated);
+
+        overwolf.games.events.onInfoUpdates2.removeListener(OverwolfEventDispatcher.gameEventUpdated2);
+        overwolf.games.events.onInfoUpdates2.addListener(OverwolfEventDispatcher.gameEventUpdated2);
+
+        overwolf.games.events.onNewEvents.removeListener(OverwolfEventDispatcher.gameEvents);
+        overwolf.games.events.onNewEvents.addListener(OverwolfEventDispatcher.gameEvents);
     }
 
     static openWebSocket() {
-        if (!OverwolfEventDispatcher.webSocket || OverwolfEventDispatcher.webSocket.readyState != 1) {
-            console.log('[WEBSOCKET]', 'Opening new websocket connection');
+        if (OverwolfEventDispatcher.webSocketRetries > 5 && OverwolfEventDispatcher.webSocketRetryTimeout == null) {
+            OverwolfEventDispatcher.webSocketRetryTimeout = setTimeout(function () {
+                OverwolfEventDispatcher.webSocketRetries--;
+                OverwolfEventDispatcher.webSocketRetryTimeout = null;
+            }, 10000);
+
+            return;
+        }
+        if (!OverwolfEventDispatcher.webSocket || OverwolfEventDispatcher.webSocket.readyState !== 1) {
+            log('[WEBSOCKET]', 'Opening new websocket connection');
             try {
                 OverwolfEventDispatcher.webSocket = new WebSocket('ws://localhost:61337/overwolf');
                 OverwolfEventDispatcher.webSocket.addEventListener('open', () => {
-                    console.log('[WEBSOCKET]', 'Websocket connection open');
+                    log('[WEBSOCKET]', 'Websocket connection open');
                     OverwolfEventDispatcher.webSocket.addEventListener('error', () => {
-                        console.log('[WEBSOCKET]', 'Got an error, creating new websocket in 5 seconds');
+                        log('[WEBSOCKET]', 'Got an error, creating new websocket in 5 seconds');
+                        OverwolfEventDispatcher.webSocketRetries++;
                         setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 5000);
                     });
 
                     OverwolfEventDispatcher.webSocket.addEventListener('close', () => {
-                        console.log('[WEBSOCKET]', 'Socket got closed, creating new websocket in 5 seconds');
+                        log('[WEBSOCKET]', 'Socket got closed, creating new websocket in 5 seconds');
+                        OverwolfEventDispatcher.webSocketRetries++;
                         setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 5000);
                     });
 
                     if (OverwolfEventDispatcher.eventQueue.length > 0) {
-                        console.log('[EVENTS]', `Sending ${OverwolfEventDispatcher.eventQueue.length} queued items to websocket!`);
+                        log('[EVENTS]', `Sending ${OverwolfEventDispatcher.eventQueue.length} queued items to websocket!`);
                     }
                     while (OverwolfEventDispatcher.eventQueue.length > 0) {
                         let item = OverwolfEventDispatcher.eventQueue.pop();
                         OverwolfEventDispatcher.sendDataToWebsocket(item);
                     }
+
+                    overwolf.games.getRunningGameInfo(info => {
+                        if (info && info.classId) {
+                            OverwolfEventDispatcher.setRequiredFeatures(info.classId);
+                       } 
+                    });
                 });
             } catch { 
+                OverwolfEventDispatcher.webSocketRetries++;
                 setTimeout(function () { OverwolfEventDispatcher.openWebSocket(); }, 5000);
             }
         }
@@ -123,132 +157,82 @@ class OverwolfEventDispatcher {
             OverwolfEventDispatcher.eventQueue.push(data);
             OverwolfEventDispatcher.openWebSocket();
         } else {
-            OverwolfEventDispatcher.webSocket.send(JSON.stringify(data));
+            OverwolfEventDispatcher.webSocket.send(JSON.stringify({ game: OverwolfEventDispatcher.currentGame, data: data }));
         }
     }
 
-    gameLaunched(event) {
-        console.debug('[GAME]', 'GameLaunched', event);
+    static gameLaunched(event) {
+        log('[GAME]', 'GameLaunched', event);
 
         OverwolfEventDispatcher.sendDataToWebsocket(event);
         OverwolfEventDispatcher.setRequiredFeatures(event.classId);
+        OverwolfEventDispatcher.firstFiredEvent = true;
     }
 
-    static setFeatures(features) {
-        overwolf.games.events.setRequiredFeatures(features, (info) => {
-            if (info.status == 'error') {
-                setTimeout(function () { OverwolfEventDispatcher.setFeatures(features); }, 5000);
-            }
+    static featureTimeout = null;
 
-            OverwolfEventDispatcher.sendDataToWebsocket(info);
-        });
+    static setFeatures(features) {
+        if (!!OverwolfEventDispatcher.featureTimeout) {
+            clearTimeout(OverwolfEventDispatcher.featureTimeout);
+            OverwolfEventDispatcher.featureTimeout = null;
+        }
+
+        OverwolfEventDispatcher.featureTimeout = setTimeout(function () {
+            overwolf.games.events.setRequiredFeatures(features, (info) => {
+                log('[GAME-EVENTS]', info);
+                if (info.status == 'error') {
+                    setTimeout(function () { OverwolfEventDispatcher.setFeatures(features); }, 5000);
+                } else {
+                    OverwolfEventDispatcher.setGameEventHandlers();
+                }
+
+                OverwolfEventDispatcher.sendDataToWebsocket(info);
+            });
+        }, 100);
     }
 
     static setRequiredFeatures(classId) {
-        console.debug('[EVENTS]', 'Trying to set game features for ', classId);
-        switch (classId) {
-            case OverwolfGameWithEventSupport.APEX:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.APEX);
-                break;
-            case OverwolfGameWithEventSupport.CSGO:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.CSGO);
-                break;
-            case OverwolfGameWithEventSupport.DOTA2:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.DOTA2);
-                break;
-            case OverwolfGameWithEventSupport.DOTAUnderlords:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.DOTAUnderlords);
-                break;
-            case OverwolfGameWithEventSupport.EscapeFromTarkov:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.EscapeFromTarkov);
-                break;
-            case OverwolfGameWithEventSupport.Fortnite:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.Fortnite);
-                break;
-            case OverwolfGameWithEventSupport.Hearthstone:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.Hearthstone);
-                break;
-            case OverwolfGameWithEventSupport.HeroesOfTheStorm:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.HeroesOfTheStorm);
-                break;
-            case OverwolfGameWithEventSupport.LeagueOfLegends:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.LeagueOfLegends);
-                break;
-            case OverwolfGameWithEventSupport.LegendsOfRuneterra:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.LegendsOfRuneterra);
-                break;
-            case OverwolfGameWithEventSupport.MTGArena:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.MTGArena);
-                break;
-            case OverwolfGameWithEventSupport.PUBG:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.PUBG);
-                break;
-            case OverwolfGameWithEventSupport.PUBGLite:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.PUBGLite);
-                break;
-            case OverwolfGameWithEventSupport.PathOfExile:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.PathOfExile);
-                break;
-            case OverwolfGameWithEventSupport.RainbowSixSiege:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.RainbowSixSiege);
-                break;
-            case OverwolfGameWithEventSupport.RocketLeague:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.RocketLeague);
-                break;
-            case OverwolfGameWithEventSupport.Splitgate:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.Splitgate);
-                break;
-            case OverwolfGameWithEventSupport.StarCraft2:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.StarCraft2);
-                break;
-            case OverwolfGameWithEventSupport.TeamfightTactics:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.TeamfightTactics);
-                break;
-            case OverwolfGameWithEventSupport.Valorant:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.Valorant);
-                break;
-            case OverwolfGameWithEventSupport.WorldOfTanks:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.WorldOfTanks);
-                break;
-            case OverwolfGameWithEventSupport.WorldOfWarcraft:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.WorldOfWarcraft);
-                break;
-            case OverwolfGameWithEventSupport.WorldOfWarships:
-                OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents.WorldOfWarships);
-                break;
-            default:
-                console.log('[EVENTS]', 'Encountered unsupported game (No events)', classId);
-                break;
+        let game = Object.keys(OverwolfGameWithEventSupport).find(key => OverwolfGameWithEventSupport[key] == classId);
+        if (game) {
+            log('[EVENTS]', 'Trying to set game features for', game);
+            OverwolfEventDispatcher.currentGame = game;
+            OverwolfEventDispatcher.setFeatures(OverwolfGameSupportedEvents[game]);
+        } else {
+            log('[EVENTS]', 'Encountered unsupported game (No events)', classId);
         }
     }
 
-    gameInfoUpdated(event) {
-        console.debug('[GAME]', 'GameInfoUpdated', event);
+    static gameInfoUpdated(event) {
+        log('[GAME]', 'GameInfoUpdated', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
 
         if (OverwolfEventDispatcher.firstFiredEvent) {
             OverwolfEventDispatcher.setRequiredFeatures(event.gameInfo.classId);
             OverwolfEventDispatcher.firstFiredEvent = false;
         }
+
+        if (!event.gameInfo.isRunning && event.runningChanged) {
+            OverwolfEventDispatcher.firstFiredEvent = true;
+        }
     }
 
-    gameEventError(event) {
-        console.debug('[EVENT]', 'GameEventError', event);
+    static gameEventError(event) {
+        log('[EVENT]', 'GameEventError', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
     }
 
-    gameEventUpdated(event) {
-        console.debug('[EVENT]', 'GameEventInfoUpdated', event);
+    static gameEventUpdated(event) {
+        log('[EVENT]', 'GameEventInfoUpdated', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
     }
 
-    gameEventUpdated2(event) {
-        console.debug('[EVENT]', 'GameEventInfoUpdated2', event);
+    static gameEventUpdated2(event) {
+        log('[EVENT]', 'GameEventInfoUpdated2', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
     }
 
-    gameEvents(event) {
-        console.debug('[EVENT]', 'GameEventNewEvents', event);
+    static gameEvents(event) {
+        log('[EVENT]', 'GameEventNewEvents', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
     }
 };
