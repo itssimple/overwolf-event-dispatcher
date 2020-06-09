@@ -160,7 +160,13 @@ class OverwolfEventDispatcher {
             OverwolfEventDispatcher.eventQueue.push(data);
             OverwolfEventDispatcher.openWebSocket();
         } else {
-            OverwolfEventDispatcher.webSocket.send(JSON.stringify({ game: OverwolfEventDispatcher.currentGame, data: data }));
+            try {
+                OverwolfEventDispatcher.webSocket.send(JSON.stringify({ game: OverwolfEventDispatcher.currentGame, data: data }));
+            }
+            catch {
+                OverwolfEventDispatcher.webSocketRetries++;
+                OverwolfEventDispatcher.eventQueue.push(data);
+            }
         }
     }
 
