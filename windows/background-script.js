@@ -99,18 +99,18 @@ class OverwolfEventDispatcher {
     }
 
     static openWebSocket() {
-        if (OverwolfEventDispatcher.webSocketRetries >= 5) {
-            log('[WEBSOCKET]', 'Too many errors, waiting a while before we retry connection.');
-            if (OverwolfEventDispatcher.webSocketRetries > 0 && OverwolfEventDispatcher.webSocketRetryTimeout == null) {
-                OverwolfEventDispatcher.webSocketRetryTimeout = setTimeout(function () {
-                    OverwolfEventDispatcher.webSocketRetries--;
-                    OverwolfEventDispatcher.webSocketRetryTimeout = null;
-                }, 10000);
-                log('[WEBSOCKET]', `Still got ${OverwolfEventDispatcher.webSocketRetries} retries to remove.`);
-                return;
-            }
-        }
-        if (!OverwolfEventDispatcher.webSocket || OverwolfEventDispatcher.webSocket.readyState !== 1) {
+        // if (OverwolfEventDispatcher.webSocketRetries >= 5) {
+        //     log('[WEBSOCKET]', 'Too many errors, waiting a while before we retry connection.');
+        //     if (OverwolfEventDispatcher.webSocketRetries > 0 && OverwolfEventDispatcher.webSocketRetryTimeout == null) {
+        //         OverwolfEventDispatcher.webSocketRetryTimeout = setTimeout(function () {
+        //             OverwolfEventDispatcher.webSocketRetries--;
+        //             OverwolfEventDispatcher.webSocketRetryTimeout = null;
+        //         }, 10000);
+        //         log('[WEBSOCKET]', `Still got ${OverwolfEventDispatcher.webSocketRetries} retries to remove.`);
+        //         return;
+        //     }
+        // }
+        if (OverwolfEventDispatcher.webSocket == null || OverwolfEventDispatcher.webSocket.readyState !== 1) {
             log('[WEBSOCKET]', 'Opening new websocket connection');
             try {
                 OverwolfEventDispatcher.webSocket = new WebSocket('ws://localhost:61337/overwolf');
@@ -119,12 +119,14 @@ class OverwolfEventDispatcher {
                     OverwolfEventDispatcher.webSocket.addEventListener('error', () => {
                         log('[WEBSOCKET]', 'Got an error, creating new websocket in 5 seconds');
                         OverwolfEventDispatcher.webSocketRetries++;
+                        OverwolfEventDispatcher.webSocket = null;
                         setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 5000);
                     });
 
                     OverwolfEventDispatcher.webSocket.addEventListener('close', () => {
                         log('[WEBSOCKET]', 'Socket got closed, creating new websocket in 5 seconds');
                         OverwolfEventDispatcher.webSocketRetries++;
+                        OverwolfEventDispatcher.webSocket = null;
                         setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 5000);
                     });
 
@@ -144,13 +146,14 @@ class OverwolfEventDispatcher {
                 });
             } catch { 
                 OverwolfEventDispatcher.webSocketRetries++;
+                OverwolfEventDispatcher.webSocket = null;
                 setTimeout(function () { OverwolfEventDispatcher.openWebSocket(); }, 5000);
             }
         }
     }
 
     static sendDataToWebsocket(data) {
-        if (!OverwolfEventDispatcher.webSocket || OverwolfEventDispatcher.webSocket.readyState != 1) {
+        if (OverwolfEventDispatcher.webSocket == null || OverwolfEventDispatcher.webSocket.readyState != 1) {
             OverwolfEventDispatcher.eventQueue.push(data);
             OverwolfEventDispatcher.openWebSocket();
         } else {
