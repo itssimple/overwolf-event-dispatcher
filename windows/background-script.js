@@ -59,7 +59,7 @@ const OverwolfGameSupportedEvents = {
 /**
  * Should we enable extra output for debugging purposes or not?
  */
-const DEBUGMODE = false;
+const DEBUGMODE = true;
 
 /**
  * 
@@ -67,7 +67,7 @@ const DEBUGMODE = false;
  * @param {...any} params   Everything else, text, objects and so forth.
  */
 function log(category, ...params) {
-    console.log(category, JSON.stringify(...params));
+    console.log(category, JSON.stringify([...params]));
     if (DEBUGMODE) {
         OverwolfEventDispatcher.sendDataToWebsocket({ category, ...params });
     }
@@ -139,13 +139,14 @@ class OverwolfEventDispatcher {
             log('[WEBSOCKET]', 'Opening new websocket connection');
             try {
                 OverwolfEventDispatcher.webSocket = new WebSocket('ws://localhost:61337/overwolf');
+                OverwolfEventDispatcher.webSocket.addEventListener('error', () => {
+                    log('[WEBSOCKET]', 'Got an error, creating new websocket in 30 seconds');
+                    OverwolfEventDispatcher.webSocket = null;
+                    setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 30000);
+                });
+
                 OverwolfEventDispatcher.webSocket.addEventListener('open', () => {
                     log('[WEBSOCKET]', 'Websocket connection open');
-                    OverwolfEventDispatcher.webSocket.addEventListener('error', () => {
-                        log('[WEBSOCKET]', 'Got an error, creating new websocket in 5 seconds');
-                        OverwolfEventDispatcher.webSocket = null;
-                        setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 5000);
-                    });
 
                     OverwolfEventDispatcher.webSocket.addEventListener('close', () => {
                         log('[WEBSOCKET]', 'Socket got closed, creating new websocket in 5 seconds');
@@ -163,7 +164,7 @@ class OverwolfEventDispatcher {
                 });
             } catch { 
                 OverwolfEventDispatcher.webSocket = null;
-                setTimeout(function () { OverwolfEventDispatcher.openWebSocket(); }, 5000);
+                setTimeout(function () { OverwolfEventDispatcher.openWebSocket(); }, 30000);
             }
         }
     }
@@ -174,11 +175,12 @@ class OverwolfEventDispatcher {
     static sendEventQueueToWebsocket() {
         if (OverwolfEventDispatcher.webSocket != null && OverwolfEventDispatcher.webSocket.readyState == 1) {
             if (OverwolfEventDispatcher.eventQueue.length > 0) {
-                log('[EVENTS]', `Sending ${OverwolfEventDispatcher.eventQueue.length} queued items to websocket!`);
-        
+                // Reversing the eventQueue, so that we get all events in the correct order when we try to empty it
+                OverwolfEventDispatcher.eventQueue.reverse();
+
                 while (OverwolfEventDispatcher.eventQueue.length > 0) {
                     let item = OverwolfEventDispatcher.eventQueue.pop();
-                    OverwolfEventDispatcher.sendDataToWebsocket(item);
+                    OverwolfEventDispatcher.webSocket.send(item);
                 }
             }
         }
@@ -191,11 +193,11 @@ class OverwolfEventDispatcher {
     static sendDataToWebsocket(data) {
         let sendData = JSON.stringify({ game: OverwolfEventDispatcher.currentGame, data: data });
 
-        if (OverwolfEventDispatcher.webSocket == null || OverwolfEventDispatcher.webSocket.readyState != 1) {
+        if (OverwolfEventDispatcher.webSocket == null || OverwolfEventDispatcher.webSocket.readyState !== 1) {
             OverwolfEventDispatcher.eventQueue.push(sendData);
-            OverwolfEventDispatcher.openWebSocket();
         } else {
             try {
+                OverwolfEventDispatcher.sendEventQueueToWebsocket();
                 OverwolfEventDispatcher.webSocket.send(sendData);
             }
             catch {
@@ -203,8 +205,6 @@ class OverwolfEventDispatcher {
                 OverwolfEventDispatcher.eventQueue.push(sendData);
             }
         }
-
-        OverwolfEventDispatcher.sendEventQueueToWebsocket();
     }
 
     /**
