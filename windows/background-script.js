@@ -1,3 +1,6 @@
+/**
+ * An enum that contains all games that support events through Overwolf
+ */
 const OverwolfGameWithEventSupport = {
     APEX: 21566,
     CSGO: 7764,
@@ -24,6 +27,9 @@ const OverwolfGameWithEventSupport = {
     WorldOfWarships: 10746
 };
 
+/**
+ * Enum that contains the supported events per game, these will automatically register with setRequiredFeatures when the game is detected
+ */
 const OverwolfGameSupportedEvents = {
     APEX: ['gep_internal', 'me', 'team', 'kill', 'damage', 'death', 'revive', 'match_state', 'match_info', 'inventory', 'location', 'match_summary', 'roster', 'rank', 'kill_feed'],
     CSGO: ['gep_internal', 'match_info', 'kill', 'death', 'assist', 'headshot', 'round_start', 'match_start', 'match_info', 'match_end', 'team_round_win', 'bomb_planted', 'bomb_change', 'reloading', 'fired', 'weapon_change', 'weapon_acquired', 'info', 'roster', 'player_activity_change', 'team_set', 'replay', 'counters', 'mvp', 'scoreboard', 'kill_feed'],
@@ -50,32 +56,56 @@ const OverwolfGameSupportedEvents = {
     WorldOfWarships: ['gep_internal', 'game_info', 'account_info', 'match', 'match_info', 'kill', 'death']
 };
 
-function log(message, ...params) {
-    console.log(message, ...params);
-    /* Only used for debugging purposes, to also send all logged events over the websocket.
-    OverwolfEventDispatcher.sendDataToWebsocket({ message, ...params });
-    */
+/**
+ * Should we enable extra output for debugging purposes or not?
+ */
+const DEBUGMODE = false;
+
+/**
+ * 
+ * @param {string} category What part of the script we currently are in
+ * @param {...any} params   Everything else, text, objects and so forth.
+ */
+function log(category, ...params) {
+    console.log(category, JSON.stringify(...params));
+    if (DEBUGMODE) {
+        OverwolfEventDispatcher.sendDataToWebsocket({ category, ...params });
+    }
 }
 
 class OverwolfEventDispatcher {
-    constructor()
-    {
+
+    /**
+     * Sets the initial event handlers, to handle game launches and game info updates
+     * Opens connection to websocket server
+     */
+    constructor() {
         log('[INIT]', 'Class initialized - Registering event handlers');
         OverwolfEventDispatcher.setEventHandlers();
         log('[INIT]', 'Setting up websocket connection');
         OverwolfEventDispatcher.openWebSocket();
     }
 
+    /**
+     * Keeping track if we are actually have sent the event-request for features
+     */
     static firstFiredEvent = true;
 
+    /**
+     * Contains all currently unsent events (because websocket was down or not opened)
+     */
     static eventQueue = [];
 
+    /**
+     * Keeps track of which game we are currently running (we send this as extra data to the websocket)
+     */
     static currentGame = null;
 
     static webSocket = null;
-    static webSocketRetries = 0;
-    static webSocketRetryTimeout = null;
 
+    /**
+     * Sets the event handlers for gameLaunched and gameInfoUpdated
+     */
     static setEventHandlers() {
         overwolf.games.onGameLaunched.removeListener(OverwolfEventDispatcher.gameLaunched);
         overwolf.games.onGameLaunched.addListener(OverwolfEventDispatcher.gameLaunched);
@@ -86,6 +116,9 @@ class OverwolfEventDispatcher {
         log('[EVENTHANDLERS]', 'All eventhandlers have been set.');
     }
 
+    /**
+     * Sets the event listeners for game events (onError, onInfoUpdates2, onNewEvents)
+     */
     static setGameEventHandlers() {
         log('[EVENTHANDLERS]', 'Setting game event-handlers');
         overwolf.games.events.onError.removeListener(OverwolfEventDispatcher.gameEventError);
@@ -98,18 +131,10 @@ class OverwolfEventDispatcher {
         overwolf.games.events.onNewEvents.addListener(OverwolfEventDispatcher.gameEvents);
     }
 
+    /**
+     * Opens up (if it can) the websocket connection, gets the current game info and sends any queued data
+     */
     static openWebSocket() {
-        // if (OverwolfEventDispatcher.webSocketRetries >= 5) {
-        //     log('[WEBSOCKET]', 'Too many errors, waiting a while before we retry connection.');
-        //     if (OverwolfEventDispatcher.webSocketRetries > 0 && OverwolfEventDispatcher.webSocketRetryTimeout == null) {
-        //         OverwolfEventDispatcher.webSocketRetryTimeout = setTimeout(function () {
-        //             OverwolfEventDispatcher.webSocketRetries--;
-        //             OverwolfEventDispatcher.webSocketRetryTimeout = null;
-        //         }, 10000);
-        //         log('[WEBSOCKET]', `Still got ${OverwolfEventDispatcher.webSocketRetries} retries to remove.`);
-        //         return;
-        //     }
-        // }
         if (OverwolfEventDispatcher.webSocket == null || OverwolfEventDispatcher.webSocket.readyState !== 1) {
             log('[WEBSOCKET]', 'Opening new websocket connection');
             try {
@@ -118,25 +143,17 @@ class OverwolfEventDispatcher {
                     log('[WEBSOCKET]', 'Websocket connection open');
                     OverwolfEventDispatcher.webSocket.addEventListener('error', () => {
                         log('[WEBSOCKET]', 'Got an error, creating new websocket in 5 seconds');
-                        OverwolfEventDispatcher.webSocketRetries++;
                         OverwolfEventDispatcher.webSocket = null;
                         setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 5000);
                     });
 
                     OverwolfEventDispatcher.webSocket.addEventListener('close', () => {
                         log('[WEBSOCKET]', 'Socket got closed, creating new websocket in 5 seconds');
-                        OverwolfEventDispatcher.webSocketRetries++;
                         OverwolfEventDispatcher.webSocket = null;
                         setTimeout(() => { OverwolfEventDispatcher.openWebSocket(); }, 5000);
                     });
 
-                    if (OverwolfEventDispatcher.eventQueue.length > 0) {
-                        log('[EVENTS]', `Sending ${OverwolfEventDispatcher.eventQueue.length} queued items to websocket!`);
-                    }
-                    while (OverwolfEventDispatcher.eventQueue.length > 0) {
-                        let item = OverwolfEventDispatcher.eventQueue.pop();
-                        OverwolfEventDispatcher.sendDataToWebsocket(item);
-                    }
+                    OverwolfEventDispatcher.sendEventQueueToWebsocket();
 
                     overwolf.games.getRunningGameInfo(info => {
                         if (info && info.classId) {
@@ -145,28 +162,55 @@ class OverwolfEventDispatcher {
                     });
                 });
             } catch { 
-                OverwolfEventDispatcher.webSocketRetries++;
                 OverwolfEventDispatcher.webSocket = null;
                 setTimeout(function () { OverwolfEventDispatcher.openWebSocket(); }, 5000);
             }
         }
     }
 
-    static sendDataToWebsocket(data) {
-        if (OverwolfEventDispatcher.webSocket == null || OverwolfEventDispatcher.webSocket.readyState != 1) {
-            OverwolfEventDispatcher.eventQueue.push(data);
-            OverwolfEventDispatcher.openWebSocket();
-        } else {
-            try {
-                OverwolfEventDispatcher.webSocket.send(JSON.stringify({ game: OverwolfEventDispatcher.currentGame, data: data }));
-            }
-            catch {
-                OverwolfEventDispatcher.webSocketRetries++;
-                OverwolfEventDispatcher.eventQueue.push(data);
+    /**
+     * Tries to send the queued items that was stored in case of errors/no connection
+     */
+    static sendEventQueueToWebsocket() {
+        if (OverwolfEventDispatcher.webSocket != null && OverwolfEventDispatcher.webSocket.readyState == 1) {
+            if (OverwolfEventDispatcher.eventQueue.length > 0) {
+                log('[EVENTS]', `Sending ${OverwolfEventDispatcher.eventQueue.length} queued items to websocket!`);
+        
+                while (OverwolfEventDispatcher.eventQueue.length > 0) {
+                    let item = OverwolfEventDispatcher.eventQueue.pop();
+                    OverwolfEventDispatcher.sendDataToWebsocket(item);
+                }
             }
         }
     }
 
+    /**
+     * Sends our data to the websocket (or the event queue, in case of no connection)
+     * @param {any} data 
+     */
+    static sendDataToWebsocket(data) {
+        let sendData = JSON.stringify({ game: OverwolfEventDispatcher.currentGame, data: data });
+
+        if (OverwolfEventDispatcher.webSocket == null || OverwolfEventDispatcher.webSocket.readyState != 1) {
+            OverwolfEventDispatcher.eventQueue.push(sendData);
+            OverwolfEventDispatcher.openWebSocket();
+        } else {
+            try {
+                OverwolfEventDispatcher.webSocket.send(sendData);
+            }
+            catch {
+                OverwolfEventDispatcher.webSocketRetries++;
+                OverwolfEventDispatcher.eventQueue.push(sendData);
+            }
+        }
+
+        OverwolfEventDispatcher.sendEventQueueToWebsocket();
+    }
+
+    /**
+     * Fired when we detect a game launch, sends the event forward to the websocket and tries to register the required features
+     * @param {RunningGameInfo} event 
+     */
     static gameLaunched(event) {
         log('[GAME]', 'GameLaunched', event);
 
@@ -177,6 +221,10 @@ class OverwolfEventDispatcher {
 
     static featureTimeout = null;
 
+    /**
+     * Tries to request the required features from the game we're currently playing
+     * @param {string[]} features A string array with all the supported features we want
+     */
     static setFeatures(features) {
         if (OverwolfEventDispatcher.featureTimeout != null) {
             clearTimeout(OverwolfEventDispatcher.featureTimeout);
@@ -197,6 +245,10 @@ class OverwolfEventDispatcher {
         }, 100);
     }
 
+    /**
+     * Fetches the currently active game, and sets the required features
+     * @param {Number} classId Contains the "classId" from Overwolf
+     */
     static setRequiredFeatures(classId) {
         let game = Object.keys(OverwolfGameWithEventSupport).find(key => OverwolfGameWithEventSupport[key] == classId);
         if (game) {
@@ -208,11 +260,16 @@ class OverwolfEventDispatcher {
         }
     }
 
+    /**
+     * Fired when the game info is updated (tab in/out, running, resolution, game)
+     * We also try to set the required features based on the game.
+     * @param {GameInfoUpdatedEvent} event Contains the gameinfo, and what was changed
+     */
     static gameInfoUpdated(event) {
         log('[GAME]', 'GameInfoUpdated', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
 
-        if (OverwolfEventDispatcher.firstFiredEvent) {
+        if (event.gameInfo.isRunning && OverwolfEventDispatcher.firstFiredEvent) {
             OverwolfEventDispatcher.setRequiredFeatures(event.gameInfo.classId);
             OverwolfEventDispatcher.firstFiredEvent = false;
         }
@@ -223,21 +280,28 @@ class OverwolfEventDispatcher {
         }
     }
 
+    /**
+     * Fired when an error occurs in the Game Event system
+     * @param {any} event We don't know what we get here, since it's not documented :D
+     */
     static gameEventError(event) {
         log('[EVENT]', 'GameEventError', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
     }
 
-    static gameEventUpdated(event) {
-        log('[EVENT]', 'GameEventInfoUpdated', event);
-        OverwolfEventDispatcher.sendDataToWebsocket(event);
-    }
-
+    /**
+     * Fired when we get information updates from the game, it can have many forms and features
+     * @param {any} event 
+     */
     static gameEventUpdated2(event) {
         log('[EVENT]', 'GameEventInfoUpdated2', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
     }
 
+    /**
+     * Fired when there are new game events that we are interested in
+     * @param {any} event 
+     */
     static gameEvents(event) {
         log('[EVENT]', 'GameEventNewEvents', event);
         OverwolfEventDispatcher.sendDataToWebsocket(event);
