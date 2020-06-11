@@ -2,7 +2,7 @@
 # yarn lockfile v1
 
 
-overwolf-games-features@^1.0.0:
-  version "1.1.1"
-  resolved "https://registry.yarnpkg.com/overwolf-games-features/-/overwolf-games-features-1.1.1.tgz#dbfdf124c96b7e62757dd3e26ef33bb481143512"
-  integrity sha512-2zn2VtC+aJsHtc1I8mPzzqWC8pBjxZWs7VsF3kz5jGBpB2abuSIbPNzvcphq6tqaFItDITW1Tbor28dyATI+xw==
+overwolf-games-features@^1.1.1:
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/overwolf-games-features/-/overwolf-games-features-1.2.0.tgz#5482411b8ef40cdd6a47ed072153e645edafc294"
+  integrity sha512-HCyinNeifniGl1tobmolUbqp0vvg/U4v+eVrAEM+JQhVty5vhWssRMMvm3s8V91jGVjsdFTTeoqmMdX6amIjiw==
