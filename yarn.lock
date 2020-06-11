@@ -3,6 +3,6 @@
 
 
 overwolf-games-features@^1.0.0:
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/overwolf-games-features/-/overwolf-games-features-1.1.0.tgz#9d9b8a6b4c24e77f19cc1a3f73441b61b45276ef"
-  integrity sha512-OnRryoLA/NOT5AFiqRIU7Gb8lGBz4Gl35gd0TyWlFP/jX/Wd456r+eEwnewle6SlCUGd+VyQhDlsGP0cQ3cLPA==
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/overwolf-games-features/-/overwolf-games-features-1.1.1.tgz#dbfdf124c96b7e62757dd3e26ef33bb481143512"
+  integrity sha512-2zn2VtC+aJsHtc1I8mPzzqWC8pBjxZWs7VsF3kz5jGBpB2abuSIbPNzvcphq6tqaFItDITW1Tbor28dyATI+xw==
