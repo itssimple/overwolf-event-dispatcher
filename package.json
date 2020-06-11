@@ -4,5 +4,8 @@
   "description": "Overwolf app that allows dispatching game events to a websocket endpoint",
   "repository": "https://github.com/itssimple/overwolf-event-dispatcher.git",
   "author": "Chris Gårdenberg <webmaster@itssimple.se>",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "overwolf-games-features": "^1.0.0"
+  }
 }
